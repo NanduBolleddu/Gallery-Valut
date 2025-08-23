@@ -1,5 +1,5 @@
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
-import s3, { bucket } from "../../lib/s3";
+import s3, { bucket } from "../../../lib/s3";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") {

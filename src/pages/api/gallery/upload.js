@@ -1,7 +1,7 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { IncomingForm } from "formidable";
 import fs from "fs";
-import s3, { bucket } from "../../lib/s3";
+import s3, { bucket } from "../../../lib/s3";
 
 export const config = { api: { bodyParser: false } };
 
