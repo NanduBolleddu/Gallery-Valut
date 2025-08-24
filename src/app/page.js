@@ -239,7 +239,7 @@ export default function Gallery() {
             {searchTerm || filterType !== "all" ? (
               <>
                 Showing {sortedImages.length} of {images.length} images
-                {searchTerm && <span> matching "{searchTerm}"</span>}
+                {searchTerm && <span> matching {searchTerm}</span>}
                 {filterType !== "all" && (
                   <span> • {filterType.toUpperCase()} only</span>
                 )}
