@@ -8,13 +8,13 @@ import {
 
 export default function Gallery() {
   const [images, setImages] = useState([]);
-  const [uploadFile, setUploadFile] = useState(null);
-  const [customName, setCustomName] = useState("");
+  const [uploadFiles, setUploadFiles] = useState([]); // Changed to array
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState("grid"); // "grid" or "list"
   const [showModal, setShowModal] = useState(false);
   const [activeMenu, setActiveMenu] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null); // For detailed view
+  const [uploadProgress, setUploadProgress] = useState({}); // Track progress per file
 
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("all"); // "all", "jpg", "png", "gif", "webp", "svg"
@@ -42,23 +42,78 @@ export default function Gallery() {
     fetchImages();
   }, []);
 
-  // Upload handler
+  // Upload handler for multiple files
   const uploadHandler = async () => {
-    if (!uploadFile) return alert("Select a file first");
+    if (uploadFiles.length === 0) return alert("Select at least one file first");
     setLoading(true);
-    const formData = new FormData();
-    formData.append("file", uploadFile, customName || uploadFile.name);
+    
+    const totalFiles = uploadFiles.length;
+    let completedUploads = 0;
 
-    await fetch("/api/gallery/upload", {
-      method: "POST",
-      body: formData,
-    });
+    // Process each file
+    for (let i = 0; i < uploadFiles.length; i++) {
+      const fileData = uploadFiles[i];
+      const formData = new FormData();
+      formData.append("file", fileData.file, fileData.customName || fileData.file.name);
 
-    setUploadFile(null);
-    setCustomName("");
+      try {
+        // Update progress for this file
+        setUploadProgress(prev => ({
+          ...prev,
+          [i]: { status: 'uploading', progress: 0 }
+        }));
+
+        await fetch("/api/gallery/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        completedUploads++;
+        
+        // Update progress for this file
+        setUploadProgress(prev => ({
+          ...prev,
+          [i]: { status: 'completed', progress: 100 }
+        }));
+
+      } catch (error) {
+        console.error(`Failed to upload ${fileData.file.name}:`, error);
+        setUploadProgress(prev => ({
+          ...prev,
+          [i]: { status: 'error', progress: 0 }
+        }));
+      }
+    }
+
+    // Reset and close modal
+    setUploadFiles([]);
+    setUploadProgress({});
     setShowModal(false);
     await fetchImages();
     setLoading(false);
+  };
+
+  // Handle file selection (multiple files)
+  const handleFileSelection = (e) => {
+    const files = Array.from(e.target.files);
+    const newFiles = files.map(file => ({
+      file,
+      customName: "",
+      id: Math.random().toString(36).substr(2, 9)
+    }));
+    setUploadFiles(newFiles);
+  };
+
+  // Update custom name for a specific file
+  const updateCustomName = (fileId, customName) => {
+    setUploadFiles(prev => prev.map(fileData => 
+      fileData.id === fileId ? { ...fileData, customName } : fileData
+    ));
+  };
+
+  // Remove a file from upload list
+  const removeFile = (fileId) => {
+    setUploadFiles(prev => prev.filter(fileData => fileData.id !== fileId));
   };
 
   // Delete handler
@@ -133,7 +188,7 @@ export default function Gallery() {
                   d="M12 4v16m8-8H4"
                 />
               </svg>
-              Upload Image
+              Upload Images
             </button>
           </div>
         </div>
@@ -307,7 +362,7 @@ export default function Gallery() {
                 onClick={() => setShowModal(true)}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200"
               >
-                Upload Your First Image
+                Upload Your First Images
               </button>
             </div>
           )
@@ -562,45 +617,208 @@ export default function Gallery() {
         )}
       </div>
 
-      {/* Upload Modal */}
+      {/* Upload Modal - Enhanced for Multiple Files */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-2xl border border-slate-700/50 w-full max-w-md shadow-2xl">
-            <div className="p-6 border-b border-slate-700/50">
+          <div className="bg-slate-800 rounded-2xl border border-slate-700/50 w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-slate-700/50 flex-shrink-0">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-white">
-                  Upload Image
+                  Upload Images
                 </h2>
                 <button
-                  onClick={() => setShowModal(false)}
+                  onClick={() => {
+                    setShowModal(false);
+                    setUploadFiles([]);
+                    setUploadProgress({});
+                  }}
                   className="text-slate-400 hover:text-white transition-colors p-1"
                 >
                   <XMarkIcon className="w-6 h-6" />
                 </button>
               </div>
               <p className="text-slate-400 text-sm mt-2">
-                Select an image and optionally rename it before uploading
+                Select multiple images and optionally rename them before uploading
               </p>
             </div>
 
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Select Image
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setUploadFile(e.target.files[0])}
-                  className="hidden"
-                  id="file-upload"
-                />
-                <label
-                  htmlFor="file-upload"
-                  className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-600 rounded-lg cursor-pointer hover:border-slate-500 transition-colors"
+            <div className="flex-1 overflow-auto p-6">
+              <div className="space-y-4">
+                {/* File Selection Area */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Select Images
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleFileSelection}
+                    className="hidden"
+                    id="file-upload"
+                  />
+                  <label
+                    htmlFor="file-upload"
+                    className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-600 rounded-lg cursor-pointer hover:border-slate-500 transition-colors"
+                  >
+                    <svg
+                      className="w-8 h-8 text-slate-400 mb-2"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                      />
+                    </svg>
+                    <p className="text-sm text-slate-300">
+                      {uploadFiles.length > 0 
+                        ? `${uploadFiles.length} file(s) selected` 
+                        : "Choose multiple images"}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      JPG, PNG, GIF, WEBP, SVG supported
+                    </p>
+                  </label>
+                </div>
+
+                {/* Selected Files List */}
+                {uploadFiles.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-medium text-slate-300 mb-3">
+                      Selected Files ({uploadFiles.length})
+                    </h3>
+                    <div className="space-y-3 max-h-64 overflow-y-auto">
+                      {uploadFiles.map((fileData, index) => (
+                        <div
+                          key={fileData.id}
+                          className="flex items-center gap-3 p-3 bg-slate-700/30 rounded-lg border border-slate-600/30"
+                        >
+                          {/* File thumbnail/icon */}
+                          <div className="w-10 h-10 rounded bg-slate-600/50 flex items-center justify-center flex-shrink-0">
+                            <svg
+                              className="w-5 h-5 text-slate-400"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={1}
+                                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                              />
+                            </svg>
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            {/* Original filename */}
+                            <p className="text-sm text-slate-300 font-medium truncate">
+                              {fileData.file.name}
+                            </p>
+                            <p className="text-xs text-slate-400 mt-1">
+                              {(fileData.file.size / 1024 / 1024).toFixed(2)} MB
+                            </p>
+
+                            {/* Custom name input */}
+                            <div className="mt-2">
+                              <input
+                                type="text"
+                                value={fileData.customName}
+                                onChange={(e) => updateCustomName(fileData.id, e.target.value)}
+                                placeholder="Custom filename (optional)"
+                                className="w-full px-3 py-1.5 text-xs bg-slate-600/50 border border-slate-500/50 rounded text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                              />
+                            </div>
+
+                            {/* Progress bar during upload */}
+                            {uploadProgress[index] && (
+                              <div className="mt-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 bg-slate-600 rounded-full h-1.5">
+                                    <div
+                                      className={`h-1.5 rounded-full transition-all duration-300 ${
+                                        uploadProgress[index].status === 'completed'
+                                          ? 'bg-green-500'
+                                          : uploadProgress[index].status === 'error'
+                                          ? 'bg-red-500'
+                                          : 'bg-blue-500'
+                                      }`}
+                                      style={{
+                                        width: `${uploadProgress[index].progress || 0}%`
+                                      }}
+                                    />
+                                  </div>
+                                  <span className="text-xs text-slate-400">
+                                    {uploadProgress[index].status === 'completed'
+                                      ? 'Done'
+                                      : uploadProgress[index].status === 'error'
+                                      ? 'Error'
+                                      : 'Uploading...'}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Remove button */}
+                          <button
+                            onClick={() => removeFile(fileData.id)}
+                            disabled={loading}
+                            className="text-slate-400 hover:text-red-400 p-1 hover:bg-red-900/20 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Remove file"
+                          >
+                            <XMarkIcon className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Upload summary */}
+                    <div className="mt-4 p-3 bg-slate-700/20 rounded-lg">
+                      <p className="text-sm text-slate-300">
+                        Total files: <span className="font-medium">{uploadFiles.length}</span>
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Total size: {(uploadFiles.reduce((total, fileData) => total + fileData.file.size, 0) / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-700/50 flex justify-between items-center flex-shrink-0">
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  setUploadFiles([]);
+                  setUploadProgress({});
+                }}
+                disabled={loading}
+                className="px-4 py-2 text-slate-300 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              
+              <div className="flex items-center gap-3">
+                {loading && (
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                    <span className="text-sm">Uploading...</span>
+                  </div>
+                )}
+                
+                <button
+                  onClick={uploadHandler}
+                  disabled={uploadFiles.length === 0 || loading}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2"
                 >
                   <svg
-                    className="w-8 h-8 text-slate-400 mb-2"
+                    className="w-4 h-4"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -612,45 +830,12 @@ export default function Gallery() {
                       d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
                     />
                   </svg>
-                  <p className="text-sm text-slate-300">
-                    {uploadFile ? uploadFile.name : "Choose an image"}
-                  </p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    {uploadFile
-                      ? `${(uploadFile.size / 1024 / 1024).toFixed(2)} MB`
-                      : "JPG, PNG, GIF, WEBP, SVG supported"}
-                  </p>
-                </label>
+                  {loading 
+                    ? `Uploading ${uploadFiles.length} files...` 
+                    : `Upload ${uploadFiles.length} files`
+                  }
+                </button>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Custom Name (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={customName}
-                  onChange={(e) => setCustomName(e.target.value)}
-                  placeholder="Enter custom filename..."
-                  className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                />
-              </div>
-            </div>
-
-            <div className="px-6 py-4 border-t border-slate-700/50 flex justify-end gap-3">
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-slate-300 hover:text-white transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={uploadHandler}
-                disabled={!uploadFile || loading}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg font-medium transition-all duration-200"
-              >
-                {loading ? "Uploading..." : "Upload"}
-              </button>
             </div>
           </div>
         </div>
@@ -707,7 +892,7 @@ export default function Gallery() {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={1}
-                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2 2v12a2 2 0 002 2z"
                     />
                   </svg>
                 </div>

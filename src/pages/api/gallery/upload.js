@@ -5,7 +5,6 @@ import s3, { bucket } from "../../../lib/s3";
 
 export const config = { api: { bodyParser: false } };
 
-
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });

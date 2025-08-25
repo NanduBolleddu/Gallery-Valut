@@ -12,7 +12,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    const object = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const object = await s3.send(
+      new GetObjectCommand({ Bucket: bucket, Key: key })
+    );
     res.setHeader("Content-Disposition", `attachment; filename="${key}"`);
     object.Body.pipe(res);
   } catch (error) {
